@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAG Document Query System</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .section {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .section h2 {
+        color: #555;
+        margin-top: 0;
+      }
+      textarea,
+      input[type="text"] {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      textarea {
+        height: 150px;
+        resize: vertical;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 5px;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .result {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 4px;
+      }
+      .error {
+        background-color: #f8d7da;
+        border-left: 4px solid #dc3545;
+        color: #721c24;
+      }
+      .success {
+        background-color: #d4edda;
+        border-left: 4px solid #28a745;
+        color: #155724;
+      }
+      .loading {
+        display: none;
+      }
+      .file-upload {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .file-upload.dragover {
+        border-color: #007bff;
+        background-color: #f0f8ff;
+      }
+      .stats {
+        display: flex;
+        justify-content: space-around;
+        margin: 20px 0;
+      }
+      .stat-card {
+        background: #e9ecef;
+        padding: 15px;
+        border-radius: 5px;
+        text-align: center;
+        flex: 1;
+        margin: 0 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>📚 RAG Document Query System</h1>
+
+      <!-- Stats Section -->
+      <div class="stats">
+        <div class="stat-card">
+          <h3>Indexed Docs</h3>
+          <p id="docCount">0</p>
+        </div>
+        <div class="stat-card">
+          <h3>Status</h3>
+          <p id="systemStatus">Checking...</p>
+        </div>
+      </div>
+
+      <!-- Document Ingestion Section -->
+      <div class="section">
+        <h2>📥 Add Documents to RAG System</h2>
+
+        <!-- File Upload Method -->
+        <div class="file-upload" id="dropZone">
+          <p>Drag & drop text files here or click to select</p>
+          <input
+            type="file"
+            id="fileInput"
+            accept=".txt,.md,.pdf"
+            multiple
+            style="display: none"
+          />
+          <button onclick="document.getElementById('fileInput').click()">
+            Select Files
+          </button>
+        </div>
+
+        <!-- Manual Text Entry Method -->
+        <h3>Or paste document content:</h3>
+        <input type="text" id="docTitle" placeholder="Document Title" />
+        <textarea
+          id="docContent"
+          placeholder="Paste your document content here..."
+        ></textarea>
+        <button onclick="ingestDocument()">Add Document</button>
+      </div>
+
+      <!-- Query Section -->
+      <div class="section">
+        <h2>🔍 Query Documents</h2>
+        <input
+          type="text"
+          id="queryInput"
+          placeholder="Enter your question..."
+        />
+        <div>
+          <label
+            >Number of results:
+            <select id="topK">
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+            </select>
+          </label>
+        </div>
+        <button onclick="searchDocuments()">Search</button>
+      </div>
+
+      <!-- Results Section -->
+      <div class="section">
+        <h2>📊 Results</h2>
+        <div id="loading" class="loading">
+          <p>Processing your query...</p>
+        </div>
+        <div id="results"></div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:3000";
+
+      // Check system health on load
+      window.onload = function () {
+        checkHealth();
+        setInterval(checkHealth, 30000); // Check every 30 seconds
+      };
+
+      // Drag and drop functionality
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileInput");
+
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+      });
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, highlight, false);
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+      });
+
+      function highlight(e) {
+        dropZone.classList.add("dragover");
+      }
+
+      function unhighlight(e) {
+        dropZone.classList.remove("dragover");
+      }
+
+      dropZone.addEventListener("drop", handleDrop, false);
+
+      function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+      }
+
+      fileInput.addEventListener("change", function () {
+        handleFiles(this.files);
+      });
+
+      function handleFiles(files) {
+        [...files].forEach(uploadFile);
+      }
+
+      async function uploadFile(file) {
+        if (
+          file.type.startsWith("text/") ||
+          file.name.endsWith(".txt") ||
+          file.name.endsWith(".md")
+        ) {
+          const content = await file.text();
+          await ingestDocumentContent(file.name, content);
+        } else {
+          alert("Please upload text files only (.txt, .md)");
+        }
+      }
+
+      async function checkHealth() {
+        try {
+          const response = await fetch(`${API_BASE}/health`);
+          const data = await response.json();
+
+          document.getElementById("systemStatus").textContent =
+            data.services.retrieval_service === "healthy"
+              ? "Online"
+              : "Offline";
+          document.getElementById("docCount").textContent =
+            data.system_stats.total_queries || 0;
+        } catch (error) {
+          document.getElementById("systemStatus").textContent = "Offline";
+          console.error("Health check failed:", error);
+        }
+      }
+
+      async function ingestDocument() {
+        const title = document.getElementById("docTitle").value;
+        const content = document.getElementById("docContent").value;
+
+        if (!title || !content) {
+          alert("Please provide both title and content");
+          return;
+        }
+
+        await ingestDocumentContent(title, content);
+      }
+
+      async function ingestDocumentContent(title, content) {
+        const resultsDiv = document.getElementById("results");
+        resultsDiv.innerHTML =
+          '<div class="result loading">Adding document to RAG system...</div>';
+
+        try {
+          const response = await fetch(`${API_BASE}/api/v1/documents`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              content: content,
+              metadata: {
+                title: title,
+                author: "Manual Upload",
+                category: "user_document",
+                source_file: title,
+                upload_date: new Date().toISOString(),
+              },
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            resultsDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ Document Added Successfully!</h3>
+                            <p><strong>Title:</strong> ${title}</p>
+                            <p><strong>ID:</strong> ${data.document_id}</p>
+                            <p><strong>Chunks Processed:</strong> ${data.chunks_processed}</p>
+                        </div>
+                    `;
+            // Clear form
+            document.getElementById("docTitle").value = "";
+            document.getElementById("docContent").value = "";
+          } else {
+            throw new Error(data.error || "Failed to add document");
+          }
+        } catch (error) {
+          resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Error Adding Document</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+
+      async function searchDocuments() {
+        const query = document.getElementById("queryInput").value;
+        const topK = document.getElementById("topK").value;
+        const resultsDiv = document.getElementById("results");
+        const loadingDiv = document.getElementById("loading");
+
+        if (!query) {
+          alert("Please enter a query");
+          return;
+        }
+
+        loadingDiv.style.display = "block";
+        resultsDiv.innerHTML = "";
+
+        try {
+          const response = await fetch(`${API_BASE}/api/v1/query`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: query,
+              topK: parseInt(topK),
+              userId: "web_user",
+            }),
+          });
+
+          const data = await response.json();
+          loadingDiv.style.display = "none";
+
+          if (response.ok) {
+            displayResults(data);
+          } else {
+            throw new Error(data.error || "Search failed");
+          }
+        } catch (error) {
+          loadingDiv.style.display = "none";
+          resultsDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Search Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+
+      function displayResults(data) {
+        const resultsDiv = document.getElementById("results");
+
+        let html = `
+                <div class="result">
+                    <h3>🔍 Query Results</h3>
+                    <p><strong>Query:</strong> ${data.query}</p>
+                    <p><strong>Results Found:</strong> ${
+                      data.retrieved_count
+                    }</p>
+                    <p><strong>Similarity Score Range:</strong> ${
+                      data.similarity_score_range || "N/A"
+                    }</p>
+                    <p><strong>Response Time:</strong> ${
+                      data.response_time_ms
+                    }ms</p>
+                </div>
+            `;
+
+        if (data.generated_answer) {
+          html += `
+                    <div class="result">
+                        <h3>🤖 Generated Answer</h3>
+                        ${data.retrieval_gated ? 
+                          `<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin: 10px 0;">
+                            <strong>⚠️ Retrieval Quality Check Failed</strong><br>
+                            Reason: ${data.gating_reason || 'Unknown'}<br>
+                            <em>Answer withheld due to insufficient retrieval quality</em>
+                          </div>` : ''}
+                        <p>${data.generated_answer}</p>
+                        ${data.retrieval_gated ? 
+                          `<div style="background: #e2e3e5; border: 1px solid #d6d8db; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 10px;">
+                            This safety mechanism prevents hallucination from poor context.
+                          </div>` : 
+                          `<div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 10px;">
+                            This answer is generated ONLY from retrieved document chunks
+                          </div>`
+                        }
+                    </div>
+                `;
+        }
+
+        if (data.results && data.results.length > 0) {
+          html += "<h3>📄 Source Documents</h3>";
+          data.results.forEach((result, index) => {
+            html += `
+                        <div class="result">
+                            <h4>Result ${index + 1} (Score: ${(
+              result.score * 100
+            ).toFixed(1)}%)</h4>
+                            <p><strong>Source:</strong> ${
+                              result.source?.source_file || "Unknown"
+                            }</p>
+                            <p><strong>Content:</strong></p>
+                            <blockquote>${result.content}</blockquote>
+                        </div>
+                    `;
+          });
+        }
+
+        resultsDiv.innerHTML = html;
+      }
+    </script>
+  </body>
+</html>

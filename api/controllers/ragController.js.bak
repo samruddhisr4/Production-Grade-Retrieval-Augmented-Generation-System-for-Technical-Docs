@@ -1,0 +1,196 @@
+  }
+
+  /**
+   * Handle file upload and ingestion requests
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async uploadFile(req, res) {
+    try {
+      // Check if file exists in the request
+      if (!req.file) {
+        return res.status(400).json({
+          error: "File is required",
+        });
+      }
+
+      // Extract title, author, and source from the request body
+      const { title, author = '', source = '' } = req.body;
+
+      if (!title) {
+        return res.status(400).json({
+          error: "Title is required",
+        });
+      }
+
+      logger.info(`Uploading file: ${req.file.originalname} with title: ${title}`);
+
+      // Call the Python retrieval service for file upload
+      const uploadResult = await retrievalService.uploadFile(
+        req.file.buffer,
+        req.file.originalname,
+        title,
+        author,
+        source
+      );
+
+      // Create document record in database
+      const docRecord = await documentService.createDocument({
+        title,
+        author,
+        source,
+        source_file: req.file.originalname,
+        file_size: req.file.buffer.length,
+        file_type: req.file.mimetype,
+        status: "completed",
+      });
+
+      // Update document status to completed
+      await documentService.updateDocumentStatus(
+        docRecord.document_id,
+        "completed"
+      );
+
+      // Invalidate any related caches
+      await cacheService.invalidateDocumentCache(docRecord.document_id);
+
+      const finalResponse = {
+        message: "File successfully uploaded and ingested",
+        document_id: uploadResult.document_id,
+        chunks_processed: uploadResult.chunks_processed,
+        status: uploadResult.status,
+        original_filename: req.file.originalname,
+        file_size: req.file.buffer.length,
+      };
+
+      res.status(201).json(finalResponse);
+    } catch (error) {
+      logger.error(`Error uploading file: ${error.message}`);
+
+      // Try to update document status to failed if possible
+      if (req.body.title) {
+        // Create a temporary document ID to update status if needed
+        const tempDocId = `temp_${Date.now()}`;
+        try {
+          await documentService.updateDocumentStatus(tempDocId, "failed");
+        } catch (statusErr) {
+          logger.error(
+            `Failed to update document status: ${statusErr.message}`
+          );
+        }
+      }
+
+      if (error.message.includes("unavailable")) {
+        return res.status(503).json({
+          error: "Upload service temporarily unavailable",
+          message: "Please try again in a few moments",
+        });
+      }
+
+      res.status(500).json({
+        error: "Failed to upload file",
+        message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Handle file upload and ingestion requests
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async uploadFile(req, res) {
+    try {
+      // Check if file exists in the request
+      if (!req.file) {
+        return res.status(400).json({
+          error: "File is required",
+        });
+      }
+
+      // Extract title, author, and source from the request body
+      const { title, author = '', source = '' } = req.body;
+
+      if (!title) {
+        return res.status(400).json({
+          error: "Title is required",
+        });
+      }
+
+      logger.info(`Uploading file: ${req.file.originalname} with title: ${title}`);
+
+      // Call the Python retrieval service for file upload
+      const uploadResult = await retrievalService.uploadFile(
+        req.file.buffer,
+        req.file.originalname,
+        title,
+        author,
+        source
+      );
+
+      // Create document record in database
+      const docRecord = await documentService.createDocument({
+        title,
+        author,
+        source,
+        source_file: req.file.originalname,
+        file_size: req.file.buffer.length,
+        file_type: req.file.mimetype,
+        status: "completed",
+      });
+
+      // Update document status to completed
+      await documentService.updateDocumentStatus(
+        docRecord.document_id,
+        "completed"
+      );
+
+      // Invalidate any related caches
+      await cacheService.invalidateDocumentCache(docRecord.document_id);
+
+      const finalResponse = {
+        message: "File successfully uploaded and ingested",
+        document_id: uploadResult.document_id,
+        chunks_processed: uploadResult.chunks_processed,
+        status: uploadResult.status,
+        original_filename: req.file.originalname,
+        file_size: req.file.buffer.length,
+      };
+
+      res.status(201).json(finalResponse);
+    } catch (error) {
+      logger.error(`Error uploading file: ${error.message}`);
+
+      // Try to update document status to failed if possible
+      if (req.body.title) {
+        // Create a temporary document ID to update status if needed
+        const tempDocId = `temp_${Date.now()}`;
+        try {
+          await documentService.updateDocumentStatus(tempDocId, "failed");
+        } catch (statusErr) {
+          logger.error(
+            `Failed to update document status: ${statusErr.message}`
+          );
+        }
+      }
+
+      if (error.message.includes("unavailable")) {
+        return res.status(503).json({
+          error: "Upload service temporarily unavailable",
+          message: "Please try again in a few moments",
+        });
+      }
+
+      res.status(500).json({
+        error: "Failed to upload file",
+        message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Health check endpoint with caching and additional diagnostics
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+// ... rest of the code ...

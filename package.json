@@ -1,0 +1,23 @@
+{
+  "name": "rag-system",
+  "version": "1.0.0",
+  "description": "Production-grade RAG system for technical documentation",
+  "private": true,
+  "workspaces": [
+    "api"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:retrieval\"",
+    "dev:api": "cd api && npm run dev",
+    "dev:retrieval": "cd retrieval-service && python -m uvicorn main:app --reload --port 8000",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "react-scripts": "^5.0.1"
+  }
+}
