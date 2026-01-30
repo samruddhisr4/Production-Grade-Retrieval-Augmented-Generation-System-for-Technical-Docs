@@ -6,21 +6,6 @@ from datetime import datetime
 import tempfile
 import os
 
-# Import file format libraries
-try:
-    import PyPDF2
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-    print("PyPDF2 not available, PDF support disabled")
-
-try:
-    from docx import Document
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-    print("python-docx not available, Word support disabled")
-
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
@@ -45,41 +30,67 @@ class DocumentProcessor:
             except UnicodeDecodeError:
                 # Fallback to latin-1 if utf-8 fails
                 return file_content.decode('latin-1')
-        elif file_type.lower() == '.pdf' and PDF_AVAILABLE:
-            # Extract text from PDF
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
-                temp_pdf.write(file_content)
-                temp_pdf_path = temp_pdf.name
-            
+        elif file_type.lower() == '.pdf':
+            # Check if PyPDF2 is available
             try:
+                import PyPDF2  # type: ignore
+            except ImportError:
+                raise Exception("PyPDF2 library not available for PDF processing")
+            
+            # Extract text from PDF
+            temp_pdf_path = None
+            try:
+                # Create a temporary file with a proper name
+                with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.pdf') as temp_pdf:
+                    temp_pdf.write(file_content)
+                    temp_pdf_path = temp_pdf.name
+                
                 text = ""
                 with open(temp_pdf_path, 'rb') as pdf_file:
                     pdf_reader = PyPDF2.PdfReader(pdf_file)
                     for page in pdf_reader.pages:
                         text += page.extract_text() + "\n"
+                
+                # Clean up temp file
+                if temp_pdf_path and os.path.exists(temp_pdf_path):
+                    os.unlink(temp_pdf_path)
+                    
                 return text
-            finally:
-                os.unlink(temp_pdf_path)  # Clean up temp file
-        elif file_type.lower() in ['.docx', '.doc'] and DOCX_AVAILABLE:
-            # Extract text from Word document
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_docx:
-                temp_docx.write(file_content)
-                temp_docx_path = temp_docx.name
-            
+            except Exception as e:
+                # Clean up temp file in case of error
+                if temp_pdf_path and os.path.exists(temp_pdf_path):
+                    os.unlink(temp_pdf_path)
+                raise e
+        elif file_type.lower() in ['.docx', '.doc']:
+            # Check if python-docx is available
             try:
+                from docx import Document  # type: ignore
+            except ImportError:
+                raise Exception("python-docx library not available for Word processing")
+            
+            # Extract text from Word document
+            temp_docx_path = None
+            try:
+                with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.docx') as temp_docx:
+                    temp_docx.write(file_content)
+                    temp_docx_path = temp_docx.name
+                
                 doc = Document(temp_docx_path)
                 text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+                
+                # Clean up temp file
+                if temp_docx_path and os.path.exists(temp_docx_path):
+                    os.unlink(temp_docx_path)
+                    
                 return text
-            finally:
-                os.unlink(temp_docx_path)  # Clean up temp file
+            except Exception as e:
+                # Clean up temp file in case of error
+                if temp_docx_path and os.path.exists(temp_docx_path):
+                    os.unlink(temp_docx_path)
+                raise e
         else:
-            # Unsupported format or library not available
-            if file_type.lower() == '.pdf' and not PDF_AVAILABLE:
-                raise Exception("PyPDF2 library not available for PDF processing")
-            elif file_type.lower() in ['.docx', '.doc'] and not DOCX_AVAILABLE:
-                raise Exception("python-docx library not available for Word processing")
-            else:
-                raise Exception(f"Unsupported file type: {file_type}")
+            # Unsupported format
+            raise Exception(f"Unsupported file type: {file_type}")
     
     def process_document(self, content: str, document_id: str, document_name: Optional[str] = None, file_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """

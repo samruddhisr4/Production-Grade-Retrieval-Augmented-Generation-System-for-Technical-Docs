@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const winston = require("winston");
+const path = require("path");
 
 // Import our services
 const ragController = require("./controllers/ragController");
@@ -64,6 +65,9 @@ app.use("/api/v1/documents", documentRateLimit);
 
 // Parse JSON bodies
 app.use(express.json({ limit: "10mb" }));
+
+// Serve static files from the React app build directory
+app.use(express.static(path.join(__dirname, "frontend-react", "build")));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -149,6 +153,12 @@ app.post(
   ragController.uploadFile
 );
 
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "frontend-react", "build", "index.html"));
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error(`Unhandled error: ${err.stack}`);
@@ -167,14 +177,6 @@ app.use((err, req, res, next) => {
       process.env.NODE_ENV === "development"
         ? err.message
         : "Something went wrong",
-  });
-});
-
-// 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
-    error: "Route not found",
-    message: `Endpoint ${req.originalUrl} does not exist`,
   });
 });
 
@@ -210,6 +212,7 @@ const startServer = async () => {
       logger.info("  POST /api/v1/query");
       logger.info("  POST /api/v1/query-llm");
       logger.info("  POST /api/v1/documents");
+      logger.info("Frontend served at http://localhost:3000");
     });
   } catch (error) {
     logger.error(`Failed to start server: ${error.message}`);

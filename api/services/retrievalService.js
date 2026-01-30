@@ -13,7 +13,7 @@ const logger = winston.createLogger({
 class RetrievalService {
   constructor() {
     this.baseUrl = process.env.RETRIEVAL_SERVICE_URL || "http://localhost:8000";
-    this.timeout = 15000; // 15 seconds timeout
+    this.timeout = 30000; // Increased to 30 seconds timeout
   }
 
   /**
